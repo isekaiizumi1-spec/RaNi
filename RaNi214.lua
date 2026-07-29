@@ -362,6 +362,14 @@ AddToggle(LocalPage, "NoClip", false, function(enabled)
             noclipConnection:Disconnect()
             noclipConnection = nil
         end
+        -- Restore collisions for current character parts when disabling NoClip
+        if Character then
+            for _, part in pairs(Character:GetChildren()) do
+                if part:IsA("BasePart") then
+                    part.CanCollide = true
+                end
+            end
+        end
     end
 end)
 
@@ -373,6 +381,10 @@ local bodyVelocity, bodyGyro
 AddToggle(LocalPage, "Fly", false, function(enabled)
     flying = enabled
     if flying then
+        -- Ensure RootPart is valid (character may have changed)
+        RootPart = Character and Character:FindFirstChild("HumanoidRootPart") or RootPart
+        if not RootPart then return end
+
         bodyVelocity = Instance.new("BodyVelocity")
         bodyGyro = Instance.new("BodyGyro")
         
@@ -387,7 +399,7 @@ AddToggle(LocalPage, "Fly", false, function(enabled)
         task.spawn(function()
             while flying do
                 RunService.RenderStepped:Wait()
-                local camCFrame = workspace.CurrentCamera.CFrame
+                local camCFrame = workspace.CurrentCamera and workspace.CurrentCamera.CFrame or CFrame.new()
                 local moveDir = Vector3.new()
                 
                 if UserInputService:IsKeyDown(Enum.KeyCode.W) then moveDir = moveDir + camCFrame.LookVector end
@@ -397,21 +409,29 @@ AddToggle(LocalPage, "Fly", false, function(enabled)
                 if UserInputService:IsKeyDown(Enum.KeyCode.Space) then moveDir = moveDir + Vector3.new(0, 1, 0) end
                 if UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) then moveDir = moveDir - Vector3.new(0, 1, 0) end
                 
-                bodyVelocity.Velocity = moveDir * flySpeed
-                bodyGyro.CFrame = camCFrame
+                if bodyVelocity and bodyVelocity.Parent then
+                    bodyVelocity.Velocity = moveDir * flySpeed
+                end
+                if bodyGyro and bodyGyro.Parent then
+                    bodyGyro.CFrame = camCFrame
+                end
             end
         end)
     else
-        if bodyVelocity then bodyVelocity:Destroy() end
-        if bodyGyro then bodyGyro:Destroy() end
+        if bodyVelocity then bodyVelocity:Destroy() bodyVelocity = nil end
+        if bodyGyro then bodyGyro:Destroy() bodyGyro = nil end
     end
 end)
 
 -- ESP Character
+local espEnabled = false
+local espTask
 AddToggle(LocalPage, "ESP Nhân Vật", false, function(enabled)
-    if enabled then
-        task.spawn(function()
-            while enabled do
+    espEnabled = enabled
+    if espEnabled then
+        if espTask then return end
+        espTask = task.spawn(function()
+            while espEnabled do
                 for _, plr in pairs(Players:GetPlayers()) do
                     if plr ~= LocalPlayer and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
                         if not plr.Character:FindFirstChild("RaNiHighlight") then
@@ -426,8 +446,10 @@ AddToggle(LocalPage, "ESP Nhân Vật", false, function(enabled)
                 end
                 task.wait(1)
             end
+            espTask = nil
         end)
     else
+        -- Remove existing highlights when disabling
         for _, plr in pairs(Players:GetPlayers()) do
             if plr.Character and plr.Character:FindFirstChild("RaNiHighlight") then
                 plr.Character.RaNiHighlight:Destroy()
@@ -438,11 +460,14 @@ end)
 
 -- Tab Misc
 local MiscPage = CreateTab("Misc")
+-- Infinite Jump: use a single connection and flag to avoid duplicate connections
+_G.InfJump = false
+local infJumpConnection = UserInputService.JumpRequest:Connect(function()
+    if _G.InfJump and Humanoid then
+        Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+    end
+end)
+
 AddToggle(MiscPage, "Infinite Jump", false, function(enabled)
     _G.InfJump = enabled
-    UserInputService.JumpRequest:Connect(function()
-        if _G.InfJump and Humanoid then
-            Humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-        end
-    end)
 end)
